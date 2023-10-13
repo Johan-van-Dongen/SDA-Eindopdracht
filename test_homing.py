@@ -29,10 +29,21 @@ def main():
     port = port_selection()
         
     # Preprogrammed sequence
-    homeX, homeY, homeZ = 200, 0, 50
+    homeX, homeY, homeZ = 150, 0, 70
     print("Connecting")
     print("Homing")
-    ctrlBot = Dbt.DoBotArm(port, homeX, homeY, homeZ, home = True) #Create DoBot Class Object with home position x,y,z
+    ctrlBot = Dbt.DoBotArm(port, homeX, homeY, homeZ ) #Create DoBot Class Object with home position x,y,z
+
+
+    ctrlBot.toggleSuction(True)  
+
+    ctrlBot.moveArmXYZ(150, 0, 10)
+    time.sleep(1)
+    ctrlBot.moveArmXYZ(150, 0, 70)
+    ctrlBot.moveArmXYZ(150, 40, 13)
+    ctrlBot.toggleSuction(False)
+
+ 
 
     print("Disconnecting")
 

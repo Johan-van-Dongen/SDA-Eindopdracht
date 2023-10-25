@@ -1,15 +1,12 @@
-import threading
 import DoBotArm as Dbt
 import time
 from serial.tools import list_ports
 import keyboard
 import cv2
-import tkinter as tk
-from tkinter import Scale, HORIZONTAL
-from PIL import Image, ImageTk
 import imutils
 from shape_detector import ShapeDetector
-
+import math
+import numpy as np
 
 
 def port_selection():
@@ -75,60 +72,30 @@ def keyboard_input(keyboard):
     if key == 'r':
         ctrlBot.rehome(None, None, None, False)
 
-def update_frame():
-    # Lees een frame van de webcam
-    ret, frame = cap.read()
-    
-    if not ret:
-        return
+def ofset_correction(xdistance,ydistance,z,w):
+    b = math.sqrt(ydistance**2+xdistance**2)
+    xmove = (z/b)*ydistance + (w/b)*xdistance
+    ymove = (z/b)*xdistance + (w/b)*ydistance
+    return xmove,ymove
 
-    # Ontvang de huidige waarden van de sliders
-    x = x_slider.get()
-    y = y_slider.get()
-    w = w_slider.get()
-    h = h_slider.get()
-
-    # Crop het frame op basis van de sliderwaarden
-    cropped_frame = frame[y:y+h, x:x+w]
-    cv2.imwrite("test.jpg", cropped_frame)
-
-    # Converteer het frame naar een afbeelding die in het Tkinter-venster kan worden weergegeven
-    img = Image.fromarray(cv2.cvtColor(cropped_frame, cv2.COLOR_BGR2RGB))
-    img = img.resize((320, 240))
-
-    photo = ImageTk.PhotoImage(image=img)
-    canvas1.create_image(0, 0, image=photo, anchor=tk.NW)
-    canvas1.image = photo
-
-    # Creëer een frame met rechthoek om het gecropte gebied weer te geven
-    frame_with_rect = frame.copy()
-    cv2.rectangle(frame_with_rect, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Groene rechthoek
-    img_with_rect = Image.fromarray(cv2.cvtColor(frame_with_rect, cv2.COLOR_BGR2RGB))
-    img_with_rect = img_with_rect.resize((320, 240))
-
-    photo_with_rect = ImageTk.PhotoImage(image=img_with_rect)
-    canvas2.create_image(0, 0, image=photo_with_rect, anchor=tk.NW)
-    canvas2.image = photo_with_rect
-    # Herhaal de functie om de frames te blijven bijwerken
-    canvas1.after(10, update_frame)
-    
 
 if __name__ == "__main__":
     #List selected ports for selection
     port = port_selection()
         
     # Preprogrammed sequence
-    homeX, homeY, homeZ = 60, -105, 10
+    homeX, homeY, homeZ = 90, -100, 10
     print("Connecting")
     print("Homing")
     ctrlBot = Dbt.DoBotArm(port, homeX, homeY, homeZ ) #Create DoBot Class Object with home position x,y,z
-    # Creëer een OpenCV-videocapture-object voor de externe webcam
     cap = cv2.VideoCapture(1)
-    # Controleer of de camera correct is geopend
+
+    # Check if the camera opened successfully
     if not cap.isOpened():
-        print("Kan de webcam niet openen.")
+        print("Error: Could not open camera.")
         exit()
 
+    
     # start the keyboard listener
     keyboard.on_press(keyboard_input)
     print("move to the first corner and press c to continue")   
@@ -136,9 +103,9 @@ if __name__ == "__main__":
     keyboard.wait('c')
     # stop the keyboard listener
     keyboard.unhook_all()
-        # read te current position
-    current_position=ctrlBot.getPosition()
-    print(current_position)
+    # read te current position
+    first_corner=ctrlBot.getPosition()
+    print(first_corner)
     # start the keyboard listener
     keyboard.on_press(keyboard_input)
     print("move to the second corner and press c to continue")
@@ -147,62 +114,38 @@ if __name__ == "__main__":
     # stop the keyboard listener
     keyboard.unhook_all()
     # read te current position
-    new_position=ctrlBot.getPosition()
-    print(new_position)
+    second_corner=ctrlBot.getPosition()
+    print(second_corner)
+    # move the arm to the home position
+    ctrlBot.moveArmXYZ(homeX,homeY,homeZ,0)
+    time.sleep(1)
+    distance_x=second_corner[0]-first_corner[0]
+    distance_y=second_corner[1]-first_corner[1]
+    if distance_y < 0:
+        distance_y = distance_y * -1
 
-    distance_x= new_position[1] - current_position[1]
-    distance_y= new_position[0] - current_position[0]   
     print(distance_x)
     print(distance_y)
-    beweegverhouding = distance_x/distance_y
-    ctrlBot.moveArmXYZ(homeX, homeY, homeZ, 0)
 
-    # Maak een Tkinter-venster
-    root = tk.Tk()
-    root.title("Webcam Crop Tool")
+    ret, image = cap.read()
+    # Check if the frame was successfully read
+    if not ret:
+        print("Error: Could not read frame.")
+        exit()
 
-    # Voeg sliders toe voor het aanpassen van het bijsnijden
-    x_slider = Scale(root, label="X", from_=0, to=640, orient=HORIZONTAL)
-    x_slider.pack()
-    x_slider.set(0)
-
-    y_slider = Scale(root, label="Y", from_=0, to=480, orient=HORIZONTAL)
-    y_slider.pack()
-    y_slider.set(0)
-
-    w_slider = Scale(root, label="Width", from_=0, to=640, orient=HORIZONTAL)
-    w_slider.pack()
-    w_slider.set(640)
-
-    h_slider = Scale(root, label="Height", from_=0, to=480, orient=HORIZONTAL)
-    h_slider.pack()
-    h_slider.set(480)
-
-    # Maak twee Tkinter Canvassen om de videofeeds weer te geven
-    canvas1 = tk.Canvas(root, width=320, height=240)
-    canvas1.pack()
-
-    canvas2 = tk.Canvas(root, width=320, height=240)
-    canvas2.pack()
-
-    # Start de functie voor het bijwerken van het frame
-    update_frame()
-
-    root.mainloop()
-
-    # read the test.jpg
-    image = cv2.imread("test.jpg")
-
-    # calculate the pixel to mm ratio
-    pixel_to_mm_ratio = distance_x/image.shape[1]
-
-    # convert the image to grayscale, blur it slightly and threshold it
-    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blurred_image = cv2.GaussianBlur(gray_image, (5, 5), 0)
-    thresh = cv2.threshold(blurred_image, 60, 255, cv2.THRESH_BINARY)[1]
-
-    # move to the current position
-    ctrlBot.moveArmXYZ(current_position[0],current_position[1],current_position[2],0)
+    # crop the image
+    image = image[158:158+212, 136:136+207]
+    cv2.imshow("Image", image)
+    # filter the red color out of the image and blur it slightly and threshold it
+    hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    cv2.imshow("hImage", hsv_image)
+    lower_red = np.array([0, 100, 100])
+    upper_red = np.array([10, 255, 255])
+    mask = cv2.inRange(hsv_image, lower_red, upper_red)
+    cv2.imshow("mImage", mask)
+    blurred_image = cv2.GaussianBlur(mask, (5, 5), 0)
+    thresh = cv2.threshold(blurred_image, 50, 255, cv2.THRESH_BINARY)[1]
+    cv2.imshow("sImage", thresh)
 
     # find contours in the thresholded image and initialize the shape detector
     cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -212,8 +155,6 @@ if __name__ == "__main__":
     # initialize lists to store the centroids and the colors
     centroids = []
     colors = []
-
-    # loop over the contours
     for c in cnts:
         # compute the center of the contour, then detect the name of the shape using only the contour
         M = cv2.moments(c)
@@ -236,21 +177,47 @@ if __name__ == "__main__":
         # show the output image
         cv2.imshow("Image", image)
 
-    # Print the color at each centroid
-    for i, color in enumerate(colors):
-        print(f"Color at Centroid {i+1} (B, G, R):", color)
-    
-    position = ctrlBot.getPosition()
-    # Print the centroid coordinates for all shapes and draw a white circle at each centroid
-    for i, centroid in enumerate(centroids):
-        print(f"Centroid {i+1} (x, y):", centroid)
-        #move to the first centroid
-        
-        #float to int
-        position = [int(i) for i in position]
 
-        ctrlBot.moveArmXYZ(position[0]+(-centroid[0]*pixel_to_mm_ratio/beweegverhouding), position[1]+(-centroid[1]*pixel_to_mm_ratio*beweegverhouding), 20, 0)
-    # release the camera and close the windows
-    cap.release()
-    cv2.destroyAllWindows()
+    frame_y = image.shape[0]
+    frame_x = image.shape[1]
+    pixel_y = -distance_y/frame_x
+    for i, centroid in enumerate(centroids):
+        ctrlBot.moveArmXYZ(first_corner[0],first_corner[1],first_corner[2],0)
+        time.sleep(1)
+        print(f"Centroid {i+1} (x,y):", centroid)
+        y_pixels = frame_x-centroid[1]
+        x_pixels = frame_y-centroid[0]
+        y_steps = y_pixels*pixel_y
+        x_steps = x_pixels*pixel_y
+        movex,movey = ofset_correction(distance_x,distance_y,x_steps,y_steps)
+        print(movex)
+        print(movey)
+        print(x_steps)
+        print(y_steps)
+
+        #move the arm to the first corner
+        ctrlBot.moveArmXYZ(first_corner[0],first_corner[1],first_corner[2]+10,0)
+        ctrlBot.commandDelay()
+        #move the pixel amount of x steps and y steps
+        ctrlBot.moveArmXYZ(first_corner[0]-movex-6,first_corner[1]+movey,first_corner[2]-10,0)
+        ctrlBot.commandDelay()
+        ctrlBot.moveArmRelXYZ(0,0,-15,0)
+        ctrlBot.commandDelay()
+        ctrlBot.toggleSuction()
+        ctrlBot.commandDelay()
+        ctrlBot.moveArmRelXYZ(0,0,50,0)
+        ctrlBot.commandDelay()
+        ctrlBot.moveArmXYZ(150,60,homeZ+20,0)
+        ctrlBot.commandDelay()
+        ctrlBot.toggleSuction()
+        ctrlBot.commandDelay()
+        ctrlBot.SetConveyor(True,speed=-15000)
+        ctrlBot.commandDelay()
+        time.sleep(10)
+        ctrlBot.SetConveyor(False)
+
+
+
+
+
     exit()

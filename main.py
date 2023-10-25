@@ -14,6 +14,44 @@ import imutils
 from shape_detector import ShapeDetector
 import argparse
 
+def cropfunction(foto):
+    # Converteer de afbeelding naar grijswaarden
+    gray = cv2.cvtColor(foto, cv2.COLOR_BGR2GRAY)
+    cv2.imshow('Gray', gray)
+
+# Definieer een drempelwaarde om zwart te detecteren (kan worden aangepast)
+    threshold = 85
+
+# Maak een masker voor de zwarte regio's
+    mask = gray < threshold
+
+# Vind de contouren van het zwarte gebied
+    contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+# Als er contouren zijn gevonden, selecteer dan het grootste contour
+    if contours:
+        largest_contour = max(contours, key=cv2.contourArea)
+
+    # Bepaal de begrenzende rechthoek rond het grootste contour
+        x, y, w, h = cv2.boundingRect(largest_contour)
+
+    # Snijd de afbeelding om het zwarte gebied te verwijderen
+        cropped_image = foto[y+5:y+h-5, x+5:x+w-5]
+
+    # Toon het bijgesneden resultaat
+        cv2.imshow('Originele afbeelding', foto)
+        
+        cv2.imshow('Contour', cv2.drawContours(foto.copy(), [largest_contour], -1, (0, 255, 0), 2))
+        cv2.imshow('Bijgesneden afbeelding', cropped_image)
+        cv2.waitKey(0)
+        return cropped_image
+    else:
+        print("Geen zwart gebied gevonden.")
+    cv2.destroyAllWindows()
+    
+
+
+
 # read the image 
 #image = cv2.imread('resources/shapes.png')
 cap = cv2.VideoCapture(1)
@@ -32,16 +70,18 @@ if not ret:
     exit()
 
 # crop the image 
-image = image[170:386, 274:490]
+image = cropfunction(image)
 
 
 
 
 # convert the image to grayscale, blur it slightly and threshold it
 gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+cv2.imshow('Gray', gray_image)
 blurred_image = cv2.GaussianBlur(gray_image, (5, 5), 0)
-thresh = cv2.threshold(blurred_image, 60, 255, cv2.THRESH_BINARY)[1]
-
+cv2.imshow('Blurred', blurred_image)
+thresh = cv2.threshold(blurred_image, 90 , 255, cv2.THRESH_BINARY)[1]
+cv2.imshow('Thresh', thresh)
 # find contours in the thresholded image and initialize the shape detector
 cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 cnts = imutils.grab_contours(cnts)
@@ -52,6 +92,7 @@ centroids = []
 colors = []
 
 # loop over the contours
+
 for c in cnts:
     # compute the center of the contour, then detect the name of the shape using only the contour
     M = cv2.moments(c)
@@ -81,7 +122,6 @@ for i, color in enumerate(colors):
 # Print the centroid coordinates for all shapes and draw a white circle at each centroid
 for i, centroid in enumerate(centroids):
     print(f"Centroid {i+1} (x, y):", centroid)
-    
 
 cv2.waitKey(0)
 

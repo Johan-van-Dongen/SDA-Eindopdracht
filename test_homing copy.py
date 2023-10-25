@@ -118,7 +118,7 @@ if __name__ == "__main__":
     port = port_selection()
         
     # Preprogrammed sequence
-    homeX, homeY, homeZ = 60, -105, 10
+    homeX, homeY, homeZ = 90, -100, 10
     print("Connecting")
     print("Homing")
     ctrlBot = Dbt.DoBotArm(port, homeX, homeY, homeZ ) #Create DoBot Class Object with home position x,y,z
@@ -129,33 +129,7 @@ if __name__ == "__main__":
         print("Kan de webcam niet openen.")
         exit()
 
-    # start the keyboard listener
-    keyboard.on_press(keyboard_input)
-    print("move to the first corner and press c to continue")   
-    #wait fot the user to press c
-    keyboard.wait('c')
-    # stop the keyboard listener
-    keyboard.unhook_all()
-        # read te current position
-    current_position=ctrlBot.getPosition()
-    print(current_position)
-    # start the keyboard listener
-    keyboard.on_press(keyboard_input)
-    print("move to the second corner and press c to continue")
-    #wait fot the user to press c
-    keyboard.wait('c')
-    # stop the keyboard listener
-    keyboard.unhook_all()
-    # read te current position
-    new_position=ctrlBot.getPosition()
-    print(new_position)
-
-    distance_x= new_position[1] - current_position[1]
-    distance_y= new_position[0] - current_position[0]   
-    print(distance_x)
-    print(distance_y)
-    beweegverhouding = distance_x/distance_y
-    ctrlBot.moveArmXYZ(homeX, homeY, homeZ, 0)
+    ctrlBot.moveArmXYZ(90, 30, 70, 0)
 
     # Maak een Tkinter-venster
     root = tk.Tk()
@@ -193,8 +167,11 @@ if __name__ == "__main__":
     # read the test.jpg
     image = cv2.imread("test.jpg")
 
+    #move to home
+    ctrlBot.moveArmXYZ(90, -100, 10, 0)
+
     # calculate the pixel to mm ratio
-    pixel_to_mm_ratio = distance_x/image.shape[1]
+    mm_to_pixel_ratio = 0.681
 
     # convert the image to grayscale, blur it slightly and threshold it
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -202,7 +179,6 @@ if __name__ == "__main__":
     thresh = cv2.threshold(blurred_image, 60, 255, cv2.THRESH_BINARY)[1]
 
     # move to the current position
-    ctrlBot.moveArmXYZ(current_position[0],current_position[1],current_position[2],0)
 
     # find contours in the thresholded image and initialize the shape detector
     cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -249,7 +225,9 @@ if __name__ == "__main__":
         #float to int
         position = [int(i) for i in position]
 
-        ctrlBot.moveArmXYZ(position[0]+(-centroid[0]*pixel_to_mm_ratio/beweegverhouding), position[1]+(-centroid[1]*pixel_to_mm_ratio*beweegverhouding), 20, 0)
+        ctrlBot.moveArmRelXYZ((centroid[0]*mm_to_pixel_ratio), (-centroid[1]*mm_to_pixel_ratio), 20, 0)
+        time.sleep(10)
+
     # release the camera and close the windows
     cap.release()
     cv2.destroyAllWindows()
